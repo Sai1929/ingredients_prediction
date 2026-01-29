@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recipe Ingredient Calculator - AI Powered</title>
+    <meta name="description" content="Calculate exact ingredient quantities for any recipe using AI. Powered by Google Gemini.">
+
+    <!-- React 18 -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        poppins: ['Poppins', 'sans-serif'],
+                    },
+                    animation: {
+                        'fade-in': 'fadeIn 0.5s ease-out',
+                        'slide-up': 'slideUp 0.4s ease-out',
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'bounce-subtle': 'bounceSubtle 2s infinite',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="font-poppins transition-colors duration-300">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useCallback, useMemo } = React;
+
+        // Configuration
+        const API_BASE_URL = 'http://localhost:8000';
+        const STORAGE_KEY = 'recipe_history';
+        const MAX_HISTORY = 10;
+
+        // Dietary restriction options
+        const DIETARY_OPTIONS = [
+            { id: 'vegetarian', label: 'Vegetarian', icon: '🥬' },
+            { id: 'vegan', label: 'Vegan', icon: '🌱' },
+            { id: 'gluten-free', label: 'Gluten-Free', icon: '🌾' },
+            { id: 'dairy-free', label: 'Dairy-Free', icon: '🥛' },
+            { id: 'nut-free', label: 'Nut-Free', icon: '🥜' },
+            { id: 'halal', label: 'Halal', icon: '☪️' },
+            { id: 'kosher', label: 'Kosher', icon: '✡️' },
+            { id: 'low-carb', label: 'Low-Carb', icon: '🍞' },
+        ];
+
+        // Popular dishes
+        const POPULAR_DISHES = [
+            { name: 'Chicken 65', emoji: '🍗', cuisine: 'Indian' },
+            { name: 'Biryani', emoji: '🍚', cuisine: 'Indian' },
+            { name: 'Butter Chicken', emoji: '🍛', cuisine: 'Indian' },
+            { name: 'Pasta Carbonara', emoji: '🍝', cuisine: 'Italian' },
+            { name: 'Tacos', emoji: '🌮', cuisine: 'Mexican' },
+            { name: 'Pad Thai', emoji: '🍜', cuisine: 'Thai' },
+            { name: 'Sushi Roll', emoji: '🍣', cuisine: 'Japanese' },
+            { name: 'Caesar Salad', emoji: '🥗', cuisine: 'American' },
+        ];
+
+        // Category styling
+        const CATEGORY_CONFIG = {
+            protein: { icon: '🍖', color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300', border: 'border-red-500' },
+            vegetable: { icon: '🥬', color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300', border: 'border-green-500' },
+            spice: { icon: '🌶️', color: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300', border: 'border-orange-500' },
+            dairy: { icon: '🥛', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300', border: 'border-blue-500' },
+            grain: { icon: '🌾', color: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300', border: 'border-amber-500' },
+            condiment: { icon: '🧂', color: 'bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-300', border: 'border-pink-500' },
+            oil: { icon: '🫒', color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300', border: 'border-yellow-500' },
+            herb: { icon: '🌿', color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300', border: 'border-emerald-500' },
+            other: { icon: '📦', color: 'bg-gray-100 text-gray-800 dark:bg-gray-700/30 dark:text-gray-300', border: 'border-gray-500' },
+        };
+
+        // Loading Skeleton Component
+        function LoadingSkeleton() {
+            return (
+                <div className="animate-pulse space-y-6">
+                    <div className="glass-card p-6">
+                        <div className="h-8 bg-gray-300 dark:bg-gray-600 rounded w-3/4 mb-4"></div>
+                        <div className="flex gap-3 mb-4">
+                            <div className="h-6 bg-gray-300 dark:bg-gray-600 rounded-full w-24"></div>
+                            <div className="h-6 bg-gray-300 dark:bg-gray-600 rounded-full w-24"></div>
+                            <div className="h-6 bg-gray-300 dark:bg-gray-600 rounded-full w-24"></div>
+                        </div>
+                        <div className="grid grid-cols-4 gap-3 p-4 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                            {[1,2,3,4].map(i => (
+                                <div key={i} className="text-center">
+                                    <div className="h-8 bg-gray-300 dark:bg-gray-600 rounded w-16 mx-auto mb-2"></div>
+                                    <div className="h-4 bg-gray-300 dark:bg-gray-600 rounded w-12 mx-auto"></div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="glass-card p-6">
+                        <div className="h-7 bg-gray-300 dark:bg-gray-600 rounded w-48 mb-4"></div>
+                        {[1,2,3,4,5].map(i => (
+                            <div key={i} className="flex items-center p-4 mb-2 bg-white dark:bg-gray-700 rounded-lg">
+                                <div className="w-10 h-10 bg-gray-300 dark:bg-gray-600 rounded mr-4"></div>
+                                <div className="flex-1">
+                                    <div className="h-5 bg-gray-300 dark:bg-gray-600 rounded w-32 mb-2"></div>
+                                    <div className="h-4 bg-gray-300 dark:bg-gray-600 rounded w-24"></div>
+                                </div>
+                                <div className="h-6 bg-gray-300 dark:bg-gray-600 rounded w-20"></div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        }
+
+        // Dark Mode Toggle Component
+        function DarkModeToggle({ darkMode, setDarkMode }) {
+            return (
+                <button
+                    onClick={() => setDarkMode(!darkMode)}
+                    className="p-3 rounded-full bg-white/20 hover:bg-white/30 transition-all duration-300 backdrop-blur-sm"
+                    aria-label="Toggle dark mode"
+                >
+                    {darkMode ? (
+                        <i className="fas fa-sun text-yellow-300 text-xl"></i>
+                    ) : (
+                        <i className="fas fa-moon text-white text-xl"></i>
+                    )}
+                </button>
+            );
+        }
+
+        // Recipe History Component
+        function RecipeHistory({ history, onSelect, onClear }) {
+            if (history.length === 0) return null;
+
+            return (
+                <div className="glass-card p-4 mb-6 animate-fade-in">
+                    <div className="flex items-center justify-between mb-3">
+                        <h3 className="font-semibold text-gray-700 dark:text-gray-200 flex items-center">
+                            <i className="fas fa-history mr-2 text-purple-600"></i>
+                            Recent Searches
+                        </h3>
+                        <button
+                            onClick={onClear}
+                            className="text-sm text-gray-500 hover:text-red-500 dark:text-gray-400 dark:hover:text-red-400 transition"
+                        >
+                            <i className="fas fa-trash-alt mr-1"></i>
+                            Clear
+                        </button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        {history.map((item, idx) => (
+                            <button
+                                key={idx}
+                                onClick={() => onSelect(item)}
+                                className="px-3 py-1.5 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-full text-sm hover:bg-purple-100 dark:hover:bg-purple-900/50 transition flex items-center gap-1"
+                            >
+                                <span>{item.dish_name}</span>
+                                <span className="text-purple-400 dark:text-purple-500">({item.servings})</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            );
+        }
+
+        // Ingredient Card Component
+        function IngredientCard({ ingredient, index }) {
+            const config = CATEGORY_CONFIG[ingredient.category?.toLowerCase()] || CATEGORY_CONFIG.other;
+
+            return (
+                <div
+                    className={`ingredient-card ${config.border} p-4 bg-white dark:bg-gray-800 rounded-lg border-l-4 hover:shadow-md transition-all duration-300`}
+                    style={{ animationDelay: `${index * 50}ms` }}
+                >
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center flex-1 min-w-0">
+                            <span className="text-2xl mr-3 flex-shrink-0">{config.icon}</span>
+                            <div className="min-w-0 flex-1">
+                                <div className="font-semibold text-gray-800 dark:text-gray-100 truncate">
+                                    {ingredient.name}
+                                </div>
+                                {ingredient.notes && (
+                                    <div className="text-sm text-gray-500 dark:text-gray-400 truncate">
+                                        {ingredient.notes}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        <div className="text-right ml-4 flex-shrink-0">
+                            <div className="text-xl font-bold text-purple-600 dark:text-purple-400">
+                                {ingredient.quantity} {ingredient.unit}
+                            </div>
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${config.color}`}>
+                                {ingredient.category}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Nutritional Info Component
+        function NutritionalInfo({ info }) {
+            if (!info) return null;
+
+            const nutrients = [
+                { label: 'Calories', value: info.calories_per_serving, unit: '', color: 'text-purple-600 dark:text-purple-400' },
+                { label: 'Protein', value: info.protein_grams, unit: 'g', color: 'text-red-600 dark:text-red-400' },
+                { label: 'Carbs', value: info.carbs_grams, unit: 'g', color: 'text-yellow-600 dark:text-yellow-400' },
+                { label: 'Fat', value: info.fat_grams, unit: 'g', color: 'text-green-600 dark:text-green-400' },
+            ];
+
+            return (
+                <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                    <div className="text-xs text-center text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider">
+                        Nutrition per serving
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        {nutrients.map((nutrient, idx) => (
+                            <div key={idx} className="text-center p-2">
+                                <div className={`text-2xl font-bold ${nutrient.color}`}>
+                                    {nutrient.value}{nutrient.unit}
+                                </div>
+                                <div className="text-xs text-gray-600 dark:text-gray-400 uppercase tracking-wide">
+                                    {nutrient.label}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        }
+
+        // Share Button Component
+        function ShareButton({ result }) {
+            const [copied, setCopied] = useState(false);
+
+            const handleShare = async () => {
+                const text = `Recipe: ${result.dish_name}\nServings: ${result.servings}\n\nIngredients:\n${result.ingredients.map(i => `- ${i.name}: ${i.quantity} ${i.unit}`).join('\n')}\n\nGenerated by Recipe Ingredient Calculator`;
+
+                if (navigator.share) {
+                    try {
+                        await navigator.share({ title: result.dish_name, text });
+                    } catch (err) {
+                        // User cancelled
+                    }
+                } else {
+                    await navigator.clipboard.writeText(text);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                }
+            };
+
+            return (
+                <button
+                    onClick={handleShare}
+                    className="px-4 py-2 bg-green-100 dark:bg-green-900/30 hover:bg-green-200 dark:hover:bg-green-900/50 text-green-700 dark:text-green-300 rounded-lg transition flex items-center gap-2"
+                >
+                    <i className={`fas ${copied ? 'fa-check' : 'fa-share-alt'}`}></i>
+                    {copied ? 'Copied!' : 'Share'}
+                </button>
+            );
+        }
+
+        // Main App Component
+        function App() {
+            // State
+            const [darkMode, setDarkMode] = useState(() => {
+                return localStorage.getItem('darkMode') === 'true';
+            });
+            const [dishName, setDishName] = useState('');
+            const [servings, setServings] = useState(4);
+            const [cuisineType, setCuisineType] = useState('');
+            const [dietaryRestrictions, setDietaryRestrictions] = useState([]);
+            const [showAdvanced, setShowAdvanced] = useState(false);
+            const [loading, setLoading] = useState(false);
+            const [result, setResult] = useState(null);
+            const [error, setError] = useState(null);
+            const [history, setHistory] = useState(() => {
+                try {
+                    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+                } catch {
+                    return [];
+                }
+            });
+
+            // Effects
+            useEffect(() => {
+                document.documentElement.classList.toggle('dark', darkMode);
+                localStorage.setItem('darkMode', darkMode);
+            }, [darkMode]);
+
+            useEffect(() => {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+            }, [history]);
+
+            // Handlers
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                if (!dishName.trim()) return;
+
+                setLoading(true);
+                setError(null);
+                setResult(null);
+
+                const requestData = {
+                    dish_name: dishName.trim(),
+                    servings: parseInt(servings),
+                    cuisine_type: cuisineType || null,
+                    dietary_restrictions: dietaryRestrictions.length > 0 ? dietaryRestrictions : null,
+                };
+
+                try {
+                    const response = await fetch(`${API_BASE_URL}/api/recipe`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(requestData),
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.detail?.message || errorData.detail || 'Failed to fetch recipe');
+                    }
+
+                    const data = await response.json();
+                    setResult(data);
+
+                    // Add to history
+                    setHistory(prev => {
+                        const newHistory = [
+                            { dish_name: dishName, servings: parseInt(servings) },
+                            ...prev.filter(h => h.dish_name !== dishName),
+                        ].slice(0, MAX_HISTORY);
+                        return newHistory;
+                    });
+                } catch (err) {
+                    setError(err.message);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const handleHistorySelect = (item) => {
+                setDishName(item.dish_name);
+                setServings(item.servings);
+            };
+
+            const toggleDietary = (id) => {
+                setDietaryRestrictions(prev =>
+                    prev.includes(id)
+                        ? prev.filter(d => d !== id)
+                        : [...prev, id]
+                );
+            };
+
+            const handlePopularDish = (dish) => {
+                setDishName(dish.name);
+                setCuisineType(dish.cuisine);
+            };
+
+            return (
+                <div className={`min-h-screen py-8 px-4 bg-gradient-to-br from-purple-600 via-purple-700 to-indigo-800 dark:from-gray-900 dark:via-purple-900 dark:to-gray-900 transition-colors duration-500`}>
+                    <div className="max-w-6xl mx-auto">
+                        {/* Header */}
+                        <header className="flex items-center justify-between mb-8 animate-fade-in">
+                            <div>
+                                <h1 className="text-4xl md:text-5xl font-bold text-white mb-2 flex items-center flex-wrap gap-3">
+                                    <i className="fas fa-utensils"></i>
+                                    <span>Recipe Calculator</span>
+                                </h1>
+                                <p className="text-white/80 text-lg">
+                                    AI-Powered Ingredient Calculator • Powered by Gemini
+                                </p>
+                            </div>
+                            <DarkModeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
+                        </header>
+
+                        {/* Recipe History */}
+                        <RecipeHistory
+                            history={history}
+                            onSelect={handleHistorySelect}
+                            onClear={() => setHistory([])}
+                        />
+
+                        {/* Main Form */}
+                        <div className="glass-card p-6 md:p-8 mb-6 animate-slide-up">
+                            <form onSubmit={handleSubmit}>
+                                <div className="grid md:grid-cols-2 gap-6 mb-6">
+                                    {/* Dish Name Input */}
+                                    <div>
+                                        <label className="block text-gray-700 dark:text-gray-200 font-semibold mb-2">
+                                            <i className="fas fa-bowl-food mr-2 text-purple-600 dark:text-purple-400"></i>
+                                            Dish Name
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={dishName}
+                                            onChange={(e) => setDishName(e.target.value)}
+                                            placeholder="e.g., Chicken 65, Biryani, Pasta"
+                                            className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition bg-white dark:bg-gray-700 dark:text-white"
+                                            required
+                                        />
+                                    </div>
+
+                                    {/* Servings Input */}
+                                    <div>
+                                        <label className="block text-gray-700 dark:text-gray-200 font-semibold mb-2">
+                                            <i className="fas fa-users mr-2 text-purple-600 dark:text-purple-400"></i>
+                                            Number of Servings
+                                        </label>
+                                        <div className="flex items-center gap-3">
+                                            <button
+                                                type="button"
+                                                onClick={() => setServings(Math.max(1, servings - 1))}
+                                                className="w-12 h-12 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition flex items-center justify-center text-xl font-bold text-gray-600 dark:text-gray-300"
+                                            >
+                                                -
+                                            </button>
+                                            <input
+                                                type="number"
+                                                value={servings}
+                                                onChange={(e) => setServings(Math.min(100, Math.max(1, parseInt(e.target.value) || 1)))}
+                                                min="1"
+                                                max="100"
+                                                className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl text-center text-xl font-semibold focus:ring-2 focus:ring-purple-500 focus:border-transparent transition bg-white dark:bg-gray-700 dark:text-white"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => setServings(Math.min(100, servings + 1))}
+                                                className="w-12 h-12 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition flex items-center justify-center text-xl font-bold text-gray-600 dark:text-gray-300"
+                                            >
+                                                +
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Popular Dishes */}
+                                <div className="mb-6">
+                                    <p className="text-gray-600 dark:text-gray-300 mb-3 font-medium">
+                                        <i className="fas fa-fire mr-2 text-orange-500"></i>
+                                        Quick Select:
+                                    </p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {POPULAR_DISHES.map((dish, idx) => (
+                                            <button
+                                                key={idx}
+                                                type="button"
+                                                onClick={() => handlePopularDish(dish)}
+                                                className={`px-4 py-2 rounded-full text-sm transition-all duration-200 flex items-center gap-2 ${
+                                                    dishName === dish.name
+                                                        ? 'bg-purple-600 text-white shadow-lg scale-105'
+                                                        : 'bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:border-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/30 text-gray-700 dark:text-gray-200'
+                                                }`}
+                                            >
+                                                <span>{dish.emoji}</span>
+                                                <span>{dish.name}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Advanced Options Toggle */}
+                                <button
+                                    type="button"
+                                    onClick={() => setShowAdvanced(!showAdvanced)}
+                                    className="text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 mb-4 text-sm font-medium flex items-center gap-2"
+                                >
+                                    <i className={`fas fa-chevron-${showAdvanced ? 'up' : 'down'} transition-transform duration-200`}></i>
+                                    Advanced Options
+                                </button>
+
+                                {/* Advanced Options Panel */}
+                                {showAdvanced && (
+                                    <div className="mb-6 p-5 bg-gray-50 dark:bg-gray-700/50 rounded-xl space-y-4 animate-fade-in">
+                                        {/* Cuisine Type */}
+                                        <div>
+                                            <label className="block text-gray-700 dark:text-gray-200 font-semibold mb-2">
+                                                <i className="fas fa-globe mr-2 text-purple-600 dark:text-purple-400"></i>
+                                                Cuisine Type
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={cuisineType}
+                                                onChange={(e) => setCuisineType(e.target.value)}
+                                                placeholder="e.g., Indian, Italian, Chinese"
+                                                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-gray-700 dark:text-white"
+                                            />
+                                        </div>
+
+                                        {/* Dietary Restrictions */}
+                                        <div>
+                                            <label className="block text-gray-700 dark:text-gray-200 font-semibold mb-2">
+                                                <i className="fas fa-leaf mr-2 text-green-600 dark:text-green-400"></i>
+                                                Dietary Restrictions
+                                            </label>
+                                            <div className="flex flex-wrap gap-2">
+                                                {DIETARY_OPTIONS.map((option) => (
+                                                    <button
+                                                        key={option.id}
+                                                        type="button"
+                                                        onClick={() => toggleDietary(option.id)}
+                                                        className={`px-3 py-2 rounded-lg text-sm transition-all duration-200 flex items-center gap-2 ${
+                                                            dietaryRestrictions.includes(option.id)
+                                                                ? 'bg-green-600 text-white shadow-md'
+                                                                : 'bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 hover:border-green-500 text-gray-700 dark:text-gray-200'
+                                                        }`}
+                                                    >
+                                                        <span>{option.icon}</span>
+                                                        <span>{option.label}</span>
+                                                        {dietaryRestrictions.includes(option.id) && (
+                                                            <i className="fas fa-check text-xs"></i>
+                                                        )}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Submit Button */}
+                                <button
+                                    type="submit"
+                                    disabled={loading || !dishName.trim()}
+                                    className="w-full btn-primary text-white py-4 rounded-xl font-semibold text-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                                >
+                                    {loading ? (
+                                        <span className="flex items-center justify-center gap-3">
+                                            <i className="fas fa-spinner fa-spin"></i>
+                                            <span>Calculating Ingredients...</span>
+                                        </span>
+                                    ) : (
+                                        <span className="flex items-center justify-center gap-3">
+                                            <i className="fas fa-calculator"></i>
+                                            <span>Calculate Ingredients</span>
+                                        </span>
+                                    )}
+                                </button>
+                            </form>
+                        </div>
+
+                        {/* Error Display */}
+                        {error && (
+                            <div className="glass-card p-6 mb-6 border-l-4 border-red-500 animate-fade-in">
+                                <div className="flex items-start gap-4">
+                                    <i className="fas fa-exclamation-circle text-red-500 text-2xl mt-1"></i>
+                                    <div>
+                                        <h3 className="font-semibold text-red-800 dark:text-red-300 mb-1">Error</h3>
+                                        <p className="text-red-700 dark:text-red-400">{error}</p>
+                                        <p className="text-sm text-red-600 dark:text-red-500 mt-2">
+                                            Make sure the backend server is running on port 8000
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Loading State */}
+                        {loading && <LoadingSkeleton />}
+
+                        {/* Results */}
+                        {result && !loading && (
+                            <div className="space-y-6 animate-fade-in">
+                                {/* Recipe Header */}
+                                <div className="glass-card p-6">
+                                    <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
+                                        <div>
+                                            <h2 className="text-3xl font-bold gradient-text mb-3">
+                                                {result.dish_name}
+                                            </h2>
+                                            <div className="flex flex-wrap gap-2">
+                                                <span className="px-3 py-1.5 bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300 rounded-full text-sm flex items-center gap-1">
+                                                    <i className="fas fa-users"></i>
+                                                    {result.servings} servings
+                                                </span>
+                                                {result.total_prep_time_minutes && (
+                                                    <span className="px-3 py-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 rounded-full text-sm flex items-center gap-1">
+                                                        <i className="fas fa-clock"></i>
+                                                        {result.total_prep_time_minutes} mins
+                                                    </span>
+                                                )}
+                                                {result.cuisine_type && (
+                                                    <span className="px-3 py-1.5 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 rounded-full text-sm flex items-center gap-1">
+                                                        <i className="fas fa-globe"></i>
+                                                        {result.cuisine_type}
+                                                    </span>
+                                                )}
+                                                {result.estimated_cost && (
+                                                    <span className="px-3 py-1.5 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 rounded-full text-sm flex items-center gap-1">
+                                                        <i className="fas fa-dollar-sign"></i>
+                                                        {result.estimated_cost}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <ShareButton result={result} />
+                                            <button
+                                                onClick={() => window.print()}
+                                                className="px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg transition flex items-center gap-2"
+                                            >
+                                                <i className="fas fa-print"></i>
+                                                Print
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Nutritional Info */}
+                                    <NutritionalInfo info={result.nutritional_info} />
+                                </div>
+
+                                {/* Ingredients List */}
+                                <div className="glass-card p-6">
+                                    <h3 className="text-2xl font-bold mb-4 flex items-center text-gray-800 dark:text-gray-100">
+                                        <i className="fas fa-list-check mr-3 text-purple-600 dark:text-purple-400"></i>
+                                        Ingredients ({result.ingredients?.length || 0})
+                                    </h3>
+                                    <div className="space-y-2">
+                                        {result.ingredients?.map((ingredient, idx) => (
+                                            <IngredientCard key={idx} ingredient={ingredient} index={idx} />
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Cooking Instructions */}
+                                {result.cooking_instructions && result.cooking_instructions.length > 0 && (
+                                    <div className="glass-card p-6">
+                                        <h3 className="text-2xl font-bold mb-4 flex items-center text-gray-800 dark:text-gray-100">
+                                            <i className="fas fa-fire-burner mr-3 text-orange-600 dark:text-orange-400"></i>
+                                            Cooking Instructions
+                                        </h3>
+                                        <ol className="space-y-4">
+                                            {result.cooking_instructions.map((instruction, idx) => (
+                                                <li key={idx} className="flex items-start gap-4">
+                                                    <span className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-purple-600 to-indigo-600 text-white rounded-full flex items-center justify-center font-bold text-sm">
+                                                        {idx + 1}
+                                                    </span>
+                                                    <span className="text-gray-700 dark:text-gray-300 pt-1 leading-relaxed">{instruction}</span>
+                                                </li>
+                                            ))}
+                                        </ol>
+                                    </div>
+                                )}
+
+                                {/* Cooking Tips */}
+                                {result.cooking_tips && (
+                                    <div className="glass-card p-6 border-l-4 border-yellow-500">
+                                        <h3 className="font-bold text-lg mb-2 flex items-center text-yellow-800 dark:text-yellow-300">
+                                            <i className="fas fa-lightbulb mr-2"></i>
+                                            Pro Tips
+                                        </h3>
+                                        <p className="text-gray-700 dark:text-gray-300 leading-relaxed">{result.cooking_tips}</p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Footer */}
+                        <footer className="text-center mt-10 text-white/70">
+                            <p className="text-sm">
+                                Powered by Google Gemini AI • Made with <span className="text-red-400">❤️</span> for food lovers
+                            </p>
+                            <p className="text-xs mt-2 text-white/50">
+                                © 2024 Recipe Ingredient Calculator
+                            </p>
+                        </footer>
+                    </div>
+                </div>
+            );
+        }
+
+        // Render App
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
