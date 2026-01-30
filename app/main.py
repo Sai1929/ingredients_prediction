@@ -1,9 +1,12 @@
 """FastAPI application factory."""
 
 import logging
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -79,6 +82,16 @@ def create_app(settings: Settings = None) -> FastAPI:
     # Register routers
     app.include_router(health_router)
     app.include_router(recipe_router)
+
+    # Serve static files (CSS, JS, etc.)
+    frontend_dir = Path(__file__).parent.parent / "frontend"
+    if frontend_dir.exists():
+        app.mount("/static", StaticFiles(directory=str(frontend_dir)), name="static")
+
+        # Serve index.html at root
+        @app.get("/", include_in_schema=False)
+        async def serve_frontend():
+            return FileResponse(str(frontend_dir / "index.html"))
 
     # Log startup info
     @app.on_event("startup")

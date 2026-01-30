@@ -15,21 +15,6 @@ limiter = Limiter(key_func=get_remote_address)
 settings = get_settings()
 
 
-@router.get("/", response_model=dict)
-async def root():
-    """
-    Root endpoint - basic health check.
-
-    Returns service status and version information.
-    """
-    return {
-        "status": "online",
-        "service": settings.app_name,
-        "version": settings.app_version,
-        "timestamp": datetime.utcnow().isoformat(),
-    }
-
-
 @router.get("/health", response_model=HealthResponse)
 @limiter.limit(settings.rate_limit_health)
 async def health_check(request: Request):
