@@ -236,7 +236,7 @@ def main():
         servings = st.number_input(
             "👥 Servings",
             min_value=1,
-            max_value=100,
+            max_value=10000,
             value=4,
             step=1
         )
